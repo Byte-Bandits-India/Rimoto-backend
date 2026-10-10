@@ -1,85 +1,99 @@
-name: Deploy Rimoto Backend
+name: Deploy Rimoto Backend to EC2 Automation Platform
 
 on:
   push:
     branches:
       - main
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-rimoto-backend
+  cancel-in-progress: false
 
 jobs:
-  deploy:
+  build-and-deploy:
+    name: Build & Deploy Backend
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout
+      - name: 📥 Checkout Code
         uses: actions/checkout@v4
 
-      - name: Setup Node
+      - name: 🟢 Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 20
+          cache: "npm"
 
-      - name: Install dependencies
-        run: npm install
+      - name: 📦 Install Dependencies
+        run: npm ci --ignore-scripts
 
-      - name: Prisma Generate
+      - name: 🏗️ Generate Prisma Client
         run: npx prisma generate
 
-      - name: Build project
+      - name: 🏗️ Build TypeScript Server
         run: npm run build
 
-      - name: Remove unnecessary files
+      - name: 📦 Prune Dev Dependencies & Package Artifact
         run: |
-          rm -rf node_modules
-          rm -rf src
+          npm prune --omit=dev --legacy-peer-deps
+          tar -czf /tmp/rimoto-backend-deploy.tar.gz \
+            --exclude='.git' \
+            --exclude='.github' \
+            --exclude='src' \
+            --exclude='*.ts' \
+            .
+          echo "✅ Package created: $(ls -lh /tmp/rimoto-backend-deploy.tar.gz)"
 
-      - name: Install production dependencies
-        run: npm install --omit=dev
-
-      - name: Create deployment archive
+      - name: 🔑 Configure SSH Key
+        env:
+          SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
         run: |
-          tar -czf deploy.tar.gz \
-          dist \
-          prisma \
-          node_modules \
-          package.json
+          mkdir -p ~/.ssh
+          if echo "$SSH_KEY" | grep -q '\\n'; then
+            printf "%b\n" "$SSH_KEY" > ~/.ssh/id_rsa
+          else
+            printf "%s\n" "$SSH_KEY" > ~/.ssh/id_rsa
+          fi
+          sed -i 's/\r$//' ~/.ssh/id_rsa
+          if [ -n "$(tail -c1 ~/.ssh/id_rsa 2>/dev/null)" ]; then
+            echo "" >> ~/.ssh/id_rsa
+          fi
+          chmod 600 ~/.ssh/id_rsa
+          cat << 'EOF_SSH' > ~/.ssh/config
+          Host *
+            StrictHostKeyChecking no
+            UserKnownHostsFile /dev/null
+            ServerAliveInterval 15
+            ServerAliveCountMax 3
+          EOF_SSH
+          chmod 600 ~/.ssh/config
 
-      - name: Copy files to server
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ${{ secrets.EC2_USER }}
-          key: ${{ secrets.EC2_SSH_KEY }}
-          source: "deploy.tar.gz"
-          target: "/home/ec2-user/rimoto/rimoto-backend"
+      - name: 📤 Transfer Artifact to EC2
+        env:
+          HOST: ${{ secrets.EC2_HOST || '15.135.74.113' }}
+          USER: ${{ secrets.EC2_USER || 'ec2-user' }}
+        run: |
+          echo "Uploading /tmp/rimoto-backend-deploy.tar.gz to EC2..."
+          scp -i ~/.ssh/id_rsa /tmp/rimoto-backend-deploy.tar.gz "${USER}@${HOST}:/tmp/rimoto-backend-deploy.tar.gz"
 
-      - name: Deploy on server
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ${{ secrets.EC2_USER }}
-          key: ${{ secrets.EC2_SSH_KEY }}
-          script: |
-            cd /home/ec2-user/rimoto/rimoto-backend
+      - name: 🚀 Execute Atomic Deployment Engine
+        env:
+          HOST: ${{ secrets.EC2_HOST || '15.135.74.113' }}
+          USER: ${{ secrets.EC2_USER || 'ec2-user' }}
+        run: |
+          ssh -i ~/.ssh/id_rsa "${USER}@${HOST}" bash -s << 'EOF_DEPLOY'
+            set -euo pipefail
+            PROJECT="rimoto-backend"
+            ARTIFACT="/tmp/rimoto-backend-deploy.tar.gz"
+            ENGINE="/opt/devops-automation/scripts/deploy.sh"
 
-            rm -rf current
-            mkdir current
+            if [[ ! -f "$ENGINE" ]]; then
+              echo "❌ ERROR: Deployment engine not found at $ENGINE"
+              exit 1
+            fi
 
-            tar -xzf deploy.tar.gz -C current
-
-            cp shared/.env current/.env
-
-            # Link shared uploads directory so images persist across deployments
-            mkdir -p shared/uploads
-            ln -sfn ../shared/uploads current/uploads
-
-            cd current
-
-            npx prisma generate
-
-            npx prisma migrate deploy
-
-            pm2 delete rimoto-backend || true
-
-            pm2 start dist/index.js --name rimoto-backend
-
-            pm2 save
+            echo "🚀 Executing native deployment for $PROJECT..."
+            "$ENGINE" "$PROJECT" "$ARTIFACT"
+            rm -f "$ARTIFACT"
+          EOF_DEPLOY
