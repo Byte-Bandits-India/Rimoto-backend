@@ -37,12 +37,7 @@ jobs:
       - name: 📦 Prune Dev Dependencies & Package Artifact
         run: |
           npm prune --omit=dev --legacy-peer-deps
-          tar -czf /tmp/rimoto-backend-deploy.tar.gz \
-            --exclude='.git' \
-            --exclude='.github' \
-            --exclude='src' \
-            --exclude='*.ts' \
-            .
+          tar -czf /tmp/rimoto-backend-deploy.tar.gz dist node_modules package.json prisma
           echo "✅ Package created: $(ls -lh /tmp/rimoto-backend-deploy.tar.gz)"
 
       - name: 🔑 Configure SSH Key
