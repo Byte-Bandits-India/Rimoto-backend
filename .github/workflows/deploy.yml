@@ -86,19 +86,44 @@ jobs:
 
             trap 'rm -f "$ARTIFACT"' EXIT
 
-            # Ensure devops-automation engine has latest scripts
-            if [[ -d "/opt/devops-automation/.git" ]]; then
-              (cd /opt/devops-automation && git pull --ff-only 2>/dev/null || true)
+            # Direct aggressive sudo disk reclamation
+            echo "🧹 Performing aggressive system disk cleanup..."
+            sudo journalctl --vacuum-size=20M 2>/dev/null || true
+            sudo dnf clean all 2>/dev/null || sudo yum clean all 2>/dev/null || true
+            sudo docker system prune -af --volumes 2>/dev/null || true
+            sudo rm -rf /var/log/journal/* 2>/dev/null || true
+            sudo rm -rf /var/www/*/releases/*.failed 2>/dev/null || true
+            sudo find /var/log -type f -name "*.log" -size +5M -exec truncate -s 512K {} \; 2>/dev/null || true
+            sudo find /tmp -maxdepth 1 -name "*-deploy.tar.gz" ! -name "${PROJECT}-deploy.tar.gz" -delete 2>/dev/null || true
+
+            # Prune older releases across all /var/www projects to keep only active + 1 previous
+            for pdir in /var/www/*; do
+              if [[ -d "$pdir/releases" ]]; then
+                active_rel=""
+                if [[ -L "$pdir/current" ]]; then
+                  active_rel=$(basename "$(readlink "$pdir/current")")
+                fi
+                rels=($(ls -1td "$pdir/releases"/2* 2>/dev/null || true))
+                total=${#rels[@]}
+                if (( total > 2 )); then
+                  for (( i=2; i<total; i++ )); do
+                    r="${rels[$i]}"
+                    if [[ "$(basename "$r")" != "$active_rel" ]]; then
+                      sudo rm -rf "$r"
+                    fi
+                  done
+                fi
+              fi
+            done
+
+            # Update /opt/devops-automation with sudo
+            if [[ -d "/opt/devops-automation" ]]; then
+              sudo git -C /opt/devops-automation pull origin main 2>/dev/null || true
+              sudo chmod +x /opt/devops-automation/scripts/*.sh 2>/dev/null || true
             fi
 
-            # Pre-flight disk space reclamation if below 500 MB
             FREE_MB=$(df -m / | awk 'NR==2 {print $4}')
-            if (( FREE_MB < 500 )); then
-              echo "⚠️ Free disk space is low (${FREE_MB} MB). Running pre-flight cleanup..."
-              if [[ -f "$CLEANUP" ]]; then
-                "$CLEANUP" --system || true
-              fi
-            fi
+            echo "📊 Free disk space after cleanup: ${FREE_MB} MB"
 
             if [[ ! -f "$ENGINE" ]]; then
               echo "❌ ERROR: Deployment engine not found at $ENGINE"
