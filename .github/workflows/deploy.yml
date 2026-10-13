@@ -128,11 +128,14 @@ jobs:
               sudo sed -i 's/sudo systemctl reload nginx$/sudo systemctl reload nginx 2>\/dev\/null || sudo systemctl restart nginx/g' "$ENGINE" 2>/dev/null || true
             fi
 
-            # Ensure valid Let's Encrypt SSL certificate is issued for rimoto.xylozentech.com
-            if [[ ! -f "/etc/letsencrypt/live/rimoto.xylozentech.com/fullchain.pem" ]]; then
+            # Ensure valid Let's Encrypt SSL certificate is issued and remove bootstrap certs
+            if ! sudo test -f "/etc/letsencrypt/live/rimoto.xylozentech.com/fullchain.pem"; then
               echo "🔒 Requesting Let's Encrypt SSL certificate for rimoto.xylozentech.com..."
               sudo mkdir -p /var/www/certbot
               sudo certbot certonly --webroot -w /var/www/certbot -d rimoto.xylozentech.com --non-interactive --agree-tos --register-unsafely-without-email || true
+            fi
+            if sudo test -f "/etc/letsencrypt/live/rimoto.xylozentech.com/fullchain.pem"; then
+              sudo rm -f /etc/pki/nginx/certs/rimoto.xylozentech.com.* 2>/dev/null || true
             fi
 
             FREE_MB=$(df -m / | awk 'NR==2 {print $4}')
