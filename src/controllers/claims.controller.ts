@@ -1,32 +1,9 @@
 import { Request, Response } from 'express';
 import { prisma } from '../utils/prisma';
-import nodemailer from 'nodemailer';
+import sendEmail from '../services/sendEmail';
 import { envConfig } from '../configs/env';
 import fs from 'fs';
 import path from 'path';
-
-const getTransporter = () => {
-  const host = (envConfig as any).SMTP_HOST || envConfig.EMAIL_HOST || 'smtp.gmail.com';
-  const port = Number((envConfig as any).SMTP_PORT || envConfig.EMAIL_PORT || 587);
-  const user = (envConfig as any).SMTP_USER || envConfig.EMAIL_USERNAME || 'abrahambillclinton@gmail.com';
-  const pass = (envConfig as any).SMTP_PASS || envConfig.EMAIL_PASSWORD || 'bznjpvzvvpjwajdl';
-
-  if (host === 'smtp.gmail.com' || host === 'gmail') {
-    return nodemailer.createTransport({
-      service: 'gmail',
-      auth: { user, pass },
-      tls: { rejectUnauthorized: false },
-    });
-  }
-
-  return nodemailer.createTransport({
-    host,
-    port,
-    secure: port === 465,
-    auth: { user, pass },
-    tls: { rejectUnauthorized: false },
-  });
-};
 
 export const submitClaim = async (req: Request, res: Response): Promise<void> => {
   try {
@@ -126,16 +103,12 @@ export const submitClaim = async (req: Request, res: Response): Promise<void> =>
     `;
 
     try {
-      const emailUser = (envConfig as any).SMTP_USER || envConfig.EMAIL_USERNAME || 'abrahambillclinton@gmail.com';
-      const transporter = getTransporter();
-      const mailInfo = await transporter.sendMail({
-        from: `"Rimoto Gear Support" <${emailUser}>`,
-        replyTo: 'contact@rimotogear.com',
-        to: email,
-        subject: `Rimoto Claim Received - Order #${orderNumber}`,
-        html: emailHtml,
-      });
-      console.log(`✅ Claim confirmation email sent successfully to ${email} (Message ID: ${mailInfo.messageId})`);
+      await sendEmail(
+        email,
+        `Rimoto Claim Received - Order #${orderNumber}`,
+        emailHtml,
+        { fromName: 'Rimoto Gear Support' }
+      );
     } catch (emailErr) {
       console.error('❌ Failed to send claim confirmation email:', emailErr);
       // We don't fail the request if email fails, just log it.
