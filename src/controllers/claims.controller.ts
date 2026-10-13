@@ -2,6 +2,8 @@ import { Request, Response } from 'express';
 import { prisma } from '../utils/prisma';
 import nodemailer from 'nodemailer';
 import { envConfig } from '../configs/env';
+import fs from 'fs';
+import path from 'path';
 
 const getTransporter = () => {
   const host = (envConfig as any).SMTP_HOST || envConfig.EMAIL_HOST || 'smtp.gmail.com';
@@ -159,6 +161,53 @@ export const getClaims = async (req: Request, res: Response): Promise<void> => {
     res.json({ success: true, data: claims });
   } catch (error: any) {
     console.error('Error fetching claims:', error);
+    res.status(500).json({ success: false, error: 'Internal server error', detail: error.message });
+  }
+};
+
+export const deleteClaim = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+
+    const existingClaim = await prisma.claim.findUnique({ where: { id } });
+    if (!existingClaim) {
+      res.status(404).json({ success: false, error: 'Claim not found' });
+      return;
+    }
+
+    if (existingClaim.invoiceUrl && existingClaim.invoiceUrl.startsWith('/uploads/')) {
+      const invoicePath = path.join(process.cwd(), existingClaim.invoiceUrl.replace(/^\//, ''));
+      if (fs.existsSync(invoicePath)) {
+        fs.unlink(invoicePath, () => {});
+      }
+    }
+
+    const mediaList = Array.isArray(existingClaim.productMediaUrls)
+      ? (existingClaim.productMediaUrls as string[])
+      : typeof existingClaim.productMediaUrls === 'string'
+      ? (() => {
+          try {
+            return JSON.parse(existingClaim.productMediaUrls as string);
+          } catch {
+            return [];
+          }
+        })()
+      : [];
+
+    for (const mUrl of mediaList) {
+      if (typeof mUrl === 'string' && mUrl.startsWith('/uploads/')) {
+        const mPath = path.join(process.cwd(), mUrl.replace(/^\//, ''));
+        if (fs.existsSync(mPath)) {
+          fs.unlink(mPath, () => {});
+        }
+      }
+    }
+
+    await prisma.claim.delete({ where: { id } });
+
+    res.json({ success: true, message: 'Claim deleted successfully' });
+  } catch (error: any) {
+    console.error('Error deleting claim:', error);
     res.status(500).json({ success: false, error: 'Internal server error', detail: error.message });
   }
 };
