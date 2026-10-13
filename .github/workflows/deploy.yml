@@ -82,6 +82,23 @@ jobs:
             PROJECT="rimoto-backend"
             ARTIFACT="/tmp/rimoto-backend-deploy.tar.gz"
             ENGINE="/opt/devops-automation/scripts/deploy.sh"
+            CLEANUP="/opt/devops-automation/scripts/cleanup.sh"
+
+            trap 'rm -f "$ARTIFACT"' EXIT
+
+            # Ensure devops-automation engine has latest scripts
+            if [[ -d "/opt/devops-automation/.git" ]]; then
+              (cd /opt/devops-automation && git pull --ff-only 2>/dev/null || true)
+            fi
+
+            # Pre-flight disk space reclamation if below 500 MB
+            FREE_MB=$(df -m / | awk 'NR==2 {print $4}')
+            if (( FREE_MB < 500 )); then
+              echo "⚠️ Free disk space is low (${FREE_MB} MB). Running pre-flight cleanup..."
+              if [[ -f "$CLEANUP" ]]; then
+                "$CLEANUP" --system || true
+              fi
+            fi
 
             if [[ ! -f "$ENGINE" ]]; then
               echo "❌ ERROR: Deployment engine not found at $ENGINE"
@@ -90,5 +107,4 @@ jobs:
 
             echo "🚀 Executing native deployment for $PROJECT..."
             "$ENGINE" "$PROJECT" "$ARTIFACT"
-            rm -f "$ARTIFACT"
           EOF_DEPLOY
