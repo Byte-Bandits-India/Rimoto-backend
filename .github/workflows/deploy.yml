@@ -146,16 +146,15 @@ jobs:
             sudo touch /var/www/rimoto-backend/shared/.env
             if ! grep -q "SMTP_PASS" /var/www/rimoto-backend/shared/.env 2>/dev/null; then
               echo "⚙️ Injecting SMTP email credentials into /var/www/rimoto-backend/shared/.env..."
-              cat << 'EOF_ENV' | sudo tee -a /var/www/rimoto-backend/shared/.env >/dev/null
-SMTP_HOST="smtp.gmail.com"
-SMTP_PORT=587
-SMTP_USER="abrahambillclinton@gmail.com"
-SMTP_PASS="bznjpvzvvpjwajdl"
-EMAIL_HOST="smtp.gmail.com"
-EMAIL_PORT=587
-EMAIL_USERNAME="abrahambillclinton@gmail.com"
-EMAIL_PASSWORD="bznjpvzvvpjwajdl"
-EOF_ENV
+              printf "%s\n" \
+                'SMTP_HOST="smtp.gmail.com"' \
+                'SMTP_PORT=587' \
+                'SMTP_USER="abrahambillclinton@gmail.com"' \
+                'SMTP_PASS="bznjpvzvvpjwajdl"' \
+                'EMAIL_HOST="smtp.gmail.com"' \
+                'EMAIL_PORT=587' \
+                'EMAIL_USERNAME="abrahambillclinton@gmail.com"' \
+                'EMAIL_PASSWORD="bznjpvzvvpjwajdl"' | sudo tee -a /var/www/rimoto-backend/shared/.env >/dev/null
             fi
 
             FREE_MB=$(df -m / | awk 'NR==2 {print $4}')
