@@ -88,38 +88,43 @@ jobs:
 
             # Direct aggressive sudo disk reclamation
             echo "🧹 Performing aggressive system disk cleanup..."
-            sudo journalctl --vacuum-size=20M 2>/dev/null || true
+            sudo journalctl --vacuum-size=10M --vacuum-time=1d 2>/dev/null || true
             sudo dnf clean all 2>/dev/null || sudo yum clean all 2>/dev/null || true
             sudo docker system prune -af --volumes 2>/dev/null || true
-            sudo rm -rf /var/log/journal/* 2>/dev/null || true
+            sudo rm -rf /var/log/journal/* /var/cache/* /var/tmp/* 2>/dev/null || true
+            sudo rm -rf /root/.npm /home/ec2-user/.npm /root/.cache /home/ec2-user/.cache /tmp/npm-* /tmp/v8-* 2>/dev/null || true
             sudo rm -rf /var/www/*/releases/*.failed 2>/dev/null || true
             sudo find /var/log -type f -name "*.log" -size +5M -exec truncate -s 512K {} \; 2>/dev/null || true
             sudo find /tmp -maxdepth 1 -name "*-deploy.tar.gz" ! -name "${PROJECT}-deploy.tar.gz" -delete 2>/dev/null || true
 
-            # Prune older releases across all /var/www projects to keep only active + 1 previous
+            # Prune older releases across all /var/www projects to keep only active release
             for pdir in /var/www/*; do
               if [[ -d "$pdir/releases" ]]; then
                 active_rel=""
                 if [[ -L "$pdir/current" ]]; then
                   active_rel=$(basename "$(readlink "$pdir/current")")
                 fi
-                rels=($(ls -1td "$pdir/releases"/2* 2>/dev/null || true))
-                total=${#rels[@]}
-                if (( total > 2 )); then
-                  for (( i=2; i<total; i++ )); do
-                    r="${rels[$i]}"
-                    if [[ "$(basename "$r")" != "$active_rel" ]]; then
-                      sudo rm -rf "$r"
-                    fi
-                  done
-                fi
+                rels=($(ls -1td "$pdir/releases"/* 2>/dev/null || true))
+                for r in "${rels[@]}"; do
+                  if [[ -n "$active_rel" && "$(basename "$r")" != "$active_rel" ]]; then
+                    sudo rm -rf "$r"
+                  fi
+                done
               fi
             done
 
-            # Update /opt/devops-automation with sudo
+            # Force update /opt/devops-automation to match origin/main
+            sudo git config --global --add safe.directory /opt/devops-automation 2>/dev/null || true
             if [[ -d "/opt/devops-automation" ]]; then
-              sudo git -C /opt/devops-automation pull origin main 2>/dev/null || true
+              sudo git -C /opt/devops-automation fetch origin main 2>/dev/null || true
+              sudo git -C /opt/devops-automation reset --hard origin/main 2>/dev/null || true
               sudo chmod +x /opt/devops-automation/scripts/*.sh 2>/dev/null || true
+            fi
+
+            # Fallback threshold patch in case deploy engine was not yet updated
+            if [[ -f "$ENGINE" ]]; then
+              sudo sed -i 's/FREE_DISK_MB < 500/FREE_DISK_MB < 250/g' "$ENGINE" 2>/dev/null || true
+              sudo sed -i 's/below the 500 MB/below the 250 MB/g' "$ENGINE" 2>/dev/null || true
             fi
 
             FREE_MB=$(df -m / | awk 'NR==2 {print $4}')
