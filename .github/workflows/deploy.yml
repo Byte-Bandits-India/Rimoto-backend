@@ -174,9 +174,13 @@ jobs:
               sudo sed -i 's|/etc/pki/nginx/certs/rimoto.xylozentech.com.crt|/etc/letsencrypt/live/rimoto.xylozentech.com/fullchain.pem|g' /etc/nginx/conf.d/rimoto.xylozentech.com.conf 2>/dev/null || true
               sudo sed -i 's|/etc/pki/nginx/certs/rimoto.xylozentech.com.key|/etc/letsencrypt/live/rimoto.xylozentech.com/privkey.pem|g' /etc/nginx/conf.d/rimoto.xylozentech.com.conf 2>/dev/null || true
               sudo rm -f /etc/pki/nginx/certs/rimoto.xylozentech.com.* 2>/dev/null || true
-              sudo nginx -t && (sudo systemctl reload nginx 2>/dev/null || sudo systemctl restart nginx)
             fi
 
+            # Prevent regex static caching from capturing /uploads/ and /api/
+            sudo sed -i 's|location /uploads/ {|location ^~ /uploads/ {|g' /etc/nginx/conf.d/rimoto.xylozentech.com.conf 2>/dev/null || true
+            sudo sed -i 's|location /api/ {|location ^~ /api/ {|g' /etc/nginx/conf.d/rimoto.xylozentech.com.conf 2>/dev/null || true
+            sudo nginx -t && (sudo systemctl reload nginx 2>/dev/null || sudo systemctl restart nginx)
+
             echo "=== POST DEPLOY NGINX CONFIG ==="
-            sudo grep -E "ssl_certificate|server_name" /etc/nginx/conf.d/rimoto.xylozentech.com.conf || true
+            sudo grep -E "ssl_certificate|server_name|location" /etc/nginx/conf.d/rimoto.xylozentech.com.conf || true
           EOF_DEPLOY
