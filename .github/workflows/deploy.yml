@@ -128,8 +128,12 @@ jobs:
               sudo sed -i 's/sudo systemctl reload nginx$/sudo systemctl reload nginx 2>\/dev\/null || sudo systemctl restart nginx/g' "$ENGINE" 2>/dev/null || true
             fi
 
-            # Reset any failed systemd state for nginx
-            sudo systemctl reset-failed nginx 2>/dev/null || true
+            # Ensure valid Let's Encrypt SSL certificate is issued for rimoto.xylozentech.com
+            if [[ ! -f "/etc/letsencrypt/live/rimoto.xylozentech.com/fullchain.pem" ]]; then
+              echo "🔒 Requesting Let's Encrypt SSL certificate for rimoto.xylozentech.com..."
+              sudo mkdir -p /var/www/certbot
+              sudo certbot certonly --webroot -w /var/www/certbot -d rimoto.xylozentech.com --non-interactive --agree-tos --register-unsafely-without-email || true
+            fi
 
             FREE_MB=$(df -m / | awk 'NR==2 {print $4}')
             echo "📊 Free disk space after cleanup: ${FREE_MB} MB"
