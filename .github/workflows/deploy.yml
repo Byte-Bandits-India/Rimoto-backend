@@ -112,7 +112,7 @@ jobs:
                 done
               fi
             done
-
+                    
             # Force update /opt/devops-automation to match origin/main
             sudo git config --global --add safe.directory /opt/devops-automation 2>/dev/null || true
             if [[ -d "/opt/devops-automation" ]]; then
@@ -139,6 +139,23 @@ jobs:
             fi
             if sudo test -f "/etc/letsencrypt/live/rimoto.xylozentech.com/fullchain.pem"; then
               sudo rm -f /etc/pki/nginx/certs/rimoto.xylozentech.com.* 2>/dev/null || true
+            fi
+
+            # Ensure SMTP and Email credentials are configured in backend shared .env
+            sudo mkdir -p /var/www/rimoto-backend/shared
+            sudo touch /var/www/rimoto-backend/shared/.env
+            if ! grep -q "SMTP_PASS" /var/www/rimoto-backend/shared/.env 2>/dev/null; then
+              echo "⚙️ Injecting SMTP email credentials into /var/www/rimoto-backend/shared/.env..."
+              cat << 'EOF_ENV' | sudo tee -a /var/www/rimoto-backend/shared/.env >/dev/null
+SMTP_HOST="smtp.gmail.com"
+SMTP_PORT=587
+SMTP_USER="abrahambillclinton@gmail.com"
+SMTP_PASS="bznjpvzvvpjwajdl"
+EMAIL_HOST="smtp.gmail.com"
+EMAIL_PORT=587
+EMAIL_USERNAME="abrahambillclinton@gmail.com"
+EMAIL_PASSWORD="bznjpvzvvpjwajdl"
+EOF_ENV
             fi
 
             FREE_MB=$(df -m / | awk 'NR==2 {print $4}')
