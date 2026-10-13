@@ -42,6 +42,17 @@ export const submitClaim = async (req: Request, res: Response): Promise<void> =>
     const invoiceFile = files?.['invoice']?.[0];
     const productMediaFiles = files?.['productMedia'] || [];
 
+    if (!claimType || !['WARRANTY', 'RETURN', 'EXCHANGE'].includes(claimType.toUpperCase())) {
+      res.status(400).json({ success: false, error: 'Valid claim type (warranty, return, exchange) is required' });
+      return;
+    }
+
+    const parsedDate = purchaseDate ? new Date(purchaseDate) : null;
+    if (!parsedDate || isNaN(parsedDate.getTime())) {
+      res.status(400).json({ success: false, error: 'Valid purchase date is required' });
+      return;
+    }
+
     if (!invoiceFile) {
       res.status(400).json({ success: false, error: 'Invoice file is required' });
       return;
@@ -57,14 +68,14 @@ export const submitClaim = async (req: Request, res: Response): Promise<void> =>
 
     const newClaim = await prisma.claim.create({
       data: {
-        claimType: claimType.toUpperCase(),
+        claimType: claimType.toUpperCase() as 'WARRANTY' | 'RETURN' | 'EXCHANGE',
         customerName,
         orderNumber,
         email,
         phone,
         billingAddress,
         shippingAddress,
-        purchaseDate: new Date(purchaseDate),
+        purchaseDate: parsedDate,
         productName,
         productColor,
         productSize,
@@ -119,7 +130,7 @@ export const submitClaim = async (req: Request, res: Response): Promise<void> =>
     });
   } catch (error: any) {
     console.error('Error submitting claim:', error);
-    res.status(500).json({ success: false, error: 'Internal server error', detail: error.message });
+    res.status(500).json({ success: false, error: error.message || 'Internal server error', detail: error.message });
   }
 };
 
