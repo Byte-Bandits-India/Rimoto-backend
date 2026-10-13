@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { prisma } from '../utils/prisma';
 import sendEmail, { getAdminNotificationEmail } from '../services/sendEmail';
 import { sendAdminClaimNotificationEmail } from '../services/emailService';
+import { appendClaimToSheet } from '../services/googleSheet.service';
 import { envConfig } from '../configs/env';
 import fs from 'fs';
 import path from 'path';
@@ -135,6 +136,31 @@ export const submitClaim = async (req: Request, res: Response): Promise<void> =>
     } catch (emailErr) {
       console.error('Failed to send claim emails:', emailErr);
     }
+
+    // Sync claim to Google Sheet asynchronously (non-blocking)
+    const productInfo = `${productName || 'N/A'}${productColor ? ` (${productColor})` : ''}${productSize ? ` [${productSize}]` : ''}`;
+    const exchangeProductInfo =
+      claimType === 'EXCHANGE'
+        ? `${exchangeProductName || 'N/A'}${exchangeProductColor ? ` (${exchangeProductColor})` : ''}${exchangeProductSize ? ` [${exchangeProductSize}]` : ''}`
+        : undefined;
+
+    appendClaimToSheet({
+      orderNumber,
+      claimType,
+      customerName,
+      email,
+      phone,
+      purchaseDate,
+      productInfo,
+      exchangeProductInfo,
+      reason,
+      invoiceUrl,
+      mediaUrls: productMediaUrls,
+      billingAddress,
+      shippingAddress,
+    }).catch((sheetErr) => {
+      console.error('Failed to sync claim to Google Sheet in background:', sheetErr);
+    });
 
     res.status(201).json({
       success: true,

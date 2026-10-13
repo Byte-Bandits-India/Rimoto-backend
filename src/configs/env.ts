@@ -26,6 +26,7 @@ const envSchema = z.object({
   SMTP_PORT: z.coerce.number().optional().default(587),
   SMTP_USER: z.string().optional().default('ethereal_user'),
   SMTP_PASS: z.string().optional().default('ethereal_pass'),
+  GOOGLE_SHEET_WEBHOOK_URL: z.string().optional().default(''),
 });
 
 const parsed = envSchema.safeParse(process.env);
