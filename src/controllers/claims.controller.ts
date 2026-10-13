@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { prisma } from '../utils/prisma';
 import sendEmail, { getAdminNotificationEmail } from '../services/sendEmail';
+import { sendAdminClaimNotificationEmail } from '../services/emailService';
 import { envConfig } from '../configs/env';
 import fs from 'fs';
 import path from 'path';
@@ -111,75 +112,28 @@ export const submitClaim = async (req: Request, res: Response): Promise<void> =>
         { fromName: 'Rimoto Gear Support' }
       );
 
-      // 2. Send structured alert to admin
+      // 2. Send structured alert to admin using dedicated template without emojis
       const adminEmail = getAdminNotificationEmail();
-      const adminEmailHtml = `
-        <div style="font-family: sans-serif; background-color: #f4f4f0; padding: 40px 20px; color: #000;">
-          <div style="max-width: 600px; margin: 0 auto; background: #fff; border: 2px solid #000; box-shadow: 6px 6px 0px #ff5722; padding: 40px;">
-            <h1 style="text-transform: uppercase; letter-spacing: 2px; font-size: 22px; border-bottom: 2px solid #000; padding-bottom: 16px; margin-top: 0;">
-              🚨 New ${claimType.toUpperCase()} Claim Filed
-            </h1>
-            <p style="font-size: 15px; margin-top: 20px; color: #333;">A new customer claim has been submitted on Rimoto Gear.</p>
-            
-            <table style="width: 100%; border-collapse: collapse; margin-top: 20px; font-size: 14px;">
-              <tr style="border-bottom: 1px solid #eee;">
-                <td style="padding: 10px 0; font-weight: bold; color: #555; width: 140px;">Order Number:</td>
-                <td style="padding: 10px 0; font-weight: bold;">#${orderNumber}</td>
-              </tr>
-              <tr style="border-bottom: 1px solid #eee;">
-                <td style="padding: 10px 0; font-weight: bold; color: #555;">Customer Name:</td>
-                <td style="padding: 10px 0;">${customerName}</td>
-              </tr>
-              <tr style="border-bottom: 1px solid #eee;">
-                <td style="padding: 10px 0; font-weight: bold; color: #555;">Email:</td>
-                <td style="padding: 10px 0;"><a href="mailto:${email}" style="color: #0066cc;">${email}</a></td>
-              </tr>
-              <tr style="border-bottom: 1px solid #eee;">
-                <td style="padding: 10px 0; font-weight: bold; color: #555;">Phone:</td>
-                <td style="padding: 10px 0;">${phone}</td>
-              </tr>
-              <tr style="border-bottom: 1px solid #eee;">
-                <td style="padding: 10px 0; font-weight: bold; color: #555;">Claim Type:</td>
-                <td style="padding: 10px 0; font-weight: bold; color: #d32f2f;">${claimType}</td>
-              </tr>
-              <tr style="border-bottom: 1px solid #eee;">
-                <td style="padding: 10px 0; font-weight: bold; color: #555;">Product:</td>
-                <td style="padding: 10px 0;">${productName || 'N/A'} ${productColor ? `(${productColor})` : ''} ${productSize ? `[${productSize}]` : ''}</td>
-              </tr>
-              ${
-                claimType === 'EXCHANGE'
-                  ? `
-              <tr style="border-bottom: 1px solid #eee;">
-                <td style="padding: 10px 0; font-weight: bold; color: #555;">Exchange For:</td>
-                <td style="padding: 10px 0;">${exchangeProductName || 'N/A'} ${exchangeProductColor ? `(${exchangeProductColor})` : ''} ${exchangeProductSize ? `[${exchangeProductSize}]` : ''}</td>
-              </tr>
-              `
-                  : ''
-              }
-            </table>
+      const productInfo = `${productName || 'N/A'}${productColor ? ` (${productColor})` : ''}${productSize ? ` [${productSize}]` : ''}`;
+      const exchangeProductInfo =
+        claimType === 'EXCHANGE'
+          ? `${exchangeProductName || 'N/A'}${exchangeProductColor ? ` (${exchangeProductColor})` : ''}${exchangeProductSize ? ` [${exchangeProductSize}]` : ''}`
+          : undefined;
 
-            <div style="background-color: #f9f9f9; border: 1px solid #ddd; padding: 16px; margin-top: 24px; font-size: 13px;">
-              <p style="margin: 0 0 6px 0; font-weight: bold; text-transform: uppercase; font-size: 11px; letter-spacing: 1px; color: #666;">Customer Reason / Message:</p>
-              <p style="margin: 0; color: #222; line-height: 1.6; white-space: pre-wrap;">${reason}</p>
-            </div>
-
-            <div style="margin-top: 30px; text-align: center;">
-              <a href="https://rimoto.xylozentech.com/admin" style="display: inline-block; background: #000; color: #fff; padding: 12px 24px; text-decoration: none; font-weight: bold; font-size: 12px; text-transform: uppercase; letter-spacing: 1px; border-radius: 4px;">
-                Review in Admin Dashboard
-              </a>
-            </div>
-          </div>
-        </div>
-      `;
-
-      await sendEmail(
+      await sendAdminClaimNotificationEmail({
         adminEmail,
-        `🔔 [New Claim] Order #${orderNumber} (${customerName} - ${claimType})`,
-        adminEmailHtml,
-        { fromName: 'Rimoto Claims Bot' }
-      );
+        orderNumber,
+        customerName,
+        email,
+        phone,
+        claimType,
+        productInfo,
+        exchangeProductInfo,
+        reason,
+        adminUrl: 'https://rimoto.xylozentech.com/admin',
+      });
     } catch (emailErr) {
-      console.error('❌ Failed to send claim emails:', emailErr);
+      console.error('Failed to send claim emails:', emailErr);
     }
 
     res.status(201).json({

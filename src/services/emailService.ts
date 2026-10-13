@@ -59,3 +59,36 @@ export const sendResetPasswordSuccessEmail = async (email: string, name: string)
   const htmlContent = injectData(template, { name });
   await sendEmail(email, 'Password Reset Successfully', htmlContent);
 };
+
+export const sendAdminClaimNotificationEmail = async (data: {
+  adminEmail: string;
+  orderNumber: string;
+  customerName: string;
+  email: string;
+  phone: string;
+  claimType: string;
+  productInfo: string;
+  exchangeProductInfo?: string;
+  reason: string;
+  adminUrl?: string;
+}): Promise<void> => {
+  const template = getTemplate('adminClaimNotification.html');
+  const exchangeRow = data.exchangeProductInfo
+    ? `<tr><td class="label">Exchange For:</td><td class="value">${data.exchangeProductInfo}</td></tr>`
+    : '';
+
+  const htmlContent = injectData(template, {
+    orderNumber: data.orderNumber,
+    customerName: data.customerName,
+    email: data.email,
+    phone: data.phone,
+    claimType: data.claimType.toUpperCase(),
+    productInfo: data.productInfo,
+    exchangeRow,
+    reason: data.reason,
+    adminUrl: data.adminUrl || 'https://rimoto.xylozentech.com/admin',
+  });
+
+  const subject = `[New Claim] Order #${data.orderNumber} (${data.customerName} - ${data.claimType.toUpperCase()})`;
+  await sendEmail(data.adminEmail, subject, htmlContent, { fromName: 'Rimoto Support' });
+};
