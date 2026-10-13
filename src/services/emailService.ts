@@ -25,7 +25,7 @@ const getTemplate = (filename: string): string => {
 export const sendInvitationRequestEmail = async (email: string): Promise<void> => {
   const template = getTemplate('invitationRequest.html');
   const htmlContent = injectData(template, { email });
-  await sendEmail(email, 'Invitation Request', htmlContent);
+  await sendEmail(email, 'Invitation Request', htmlContent, { bccAdmin: true });
 };
 
 export const sendRegistrationOtpEmail = async (

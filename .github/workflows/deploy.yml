@@ -156,6 +156,11 @@ jobs:
                 'EMAIL_USERNAME="abrahambillclinton@gmail.com"' \
                 'EMAIL_PASSWORD="bznjpvzvvpjwajdl"' | sudo tee -a /var/www/rimoto-backend/shared/.env >/dev/null
             fi
+            if ! grep -q "ADMIN_NOTIFICATION_EMAIL" /var/www/rimoto-backend/shared/.env 2>/dev/null; then
+              echo "⚙️ Injecting ADMIN_NOTIFICATION_EMAIL into /var/www/rimoto-backend/shared/.env..."
+              printf "%s\n" 'ADMIN_NOTIFICATION_EMAIL="abrahambillclinton@gmail.com"' | sudo tee -a /var/www/rimoto-backend/shared/.env >/dev/null
+            fi
+            sudo sed -i 's/admin@rimoto.in/abrahambillclinton@gmail.com/g' /var/www/rimoto-backend/shared/.env 2>/dev/null || true
 
             FREE_MB=$(df -m / | awk 'NR==2 {print $4}')
             echo "📊 Free disk space after cleanup: ${FREE_MB} MB"
