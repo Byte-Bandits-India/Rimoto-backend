@@ -121,11 +121,15 @@ jobs:
               sudo chmod +x /opt/devops-automation/scripts/*.sh 2>/dev/null || true
             fi
 
-            # Fallback threshold patch in case deploy engine was not yet updated
+            # Fallback patches in case deploy engine was not yet updated
             if [[ -f "$ENGINE" ]]; then
               sudo sed -i 's/FREE_DISK_MB < 500/FREE_DISK_MB < 250/g' "$ENGINE" 2>/dev/null || true
               sudo sed -i 's/below the 500 MB/below the 250 MB/g' "$ENGINE" 2>/dev/null || true
+              sudo sed -i 's/sudo systemctl reload nginx$/sudo systemctl reload nginx 2>\/dev\/null || sudo systemctl restart nginx/g' "$ENGINE" 2>/dev/null || true
             fi
+
+            # Reset any failed systemd state for nginx
+            sudo systemctl reset-failed nginx 2>/dev/null || true
 
             FREE_MB=$(df -m / | awk 'NR==2 {print $4}')
             echo "📊 Free disk space after cleanup: ${FREE_MB} MB"
